@@ -6,12 +6,14 @@ namespace Rector\Core\Configuration;
 
 use Jean85\PrettyVersions;
 use Nette\Utils\Strings;
+use OndraM\CiDetector\CiDetector;
 use Rector\ChangesReporting\Output\CheckstyleOutputFormatter;
 use Rector\ChangesReporting\Output\JsonOutputFormatter;
 use Rector\Core\Exception\Rector\RectorNotFoundOrNotValidRectorClassException;
 use Rector\Core\Rector\AbstractRector;
 use Rector\Core\Testing\PHPUnit\PHPUnitEnvironment;
 use Symfony\Component\Console\Input\InputInterface;
+use Symplify\SmartFileSystem\SmartFileInfo;
 
 final class Configuration
 {
@@ -61,11 +63,32 @@ final class Configuration
     private $source = [];
 
     /**
+     * @var CiDetector
+     */
+    private $ciDetector;
+
+    /**
+     * @var SmartFileInfo[]
+     */
+    private $fileInfos = [];
+
+    /**
+     * @var bool
+     */
+    private $shouldClearCache = false;
+
+    public function __construct(CiDetector $ciDetector)
+    {
+        $this->ciDetector = $ciDetector;
+    }
+
+    /**
      * Needs to run in the start of the life cycle, since the rest of workflow uses it.
      */
     public function resolveFromInput(InputInterface $input): void
     {
         $this->isDryRun = (bool) $input->getOption(Option::OPTION_DRY_RUN);
+        $this->shouldClearCache = (bool) $input->getOption(Option::OPTION_CLEAR_CACHE);
         $this->hideAutoloadErrors = (bool) $input->getOption(Option::HIDE_AUTOLOAD_ERRORS);
         $this->mustMatchGitDiff = (bool) $input->getOption(Option::MATCH_GIT_DIFF);
         $this->showProgressBar = $this->canShowProgressBar($input);
@@ -119,6 +142,10 @@ final class Configuration
 
     public function showProgressBar(): bool
     {
+        if ($this->ciDetector->isCiDetected()) {
+            return false;
+        }
+
         return $this->showProgressBar;
     }
 
@@ -165,6 +192,27 @@ final class Configuration
     public function getSource(): array
     {
         return $this->source;
+    }
+
+    /**
+     * @param SmartFileInfo[] $fileInfos
+     */
+    public function setFileInfos(array $fileInfos): void
+    {
+        $this->fileInfos = $fileInfos;
+    }
+
+    /**
+     * @return SmartFileInfo[]
+     */
+    public function getFileInfos(): array
+    {
+        return $this->fileInfos;
+    }
+
+    public function shouldClearCache(): bool
+    {
+        return $this->shouldClearCache;
     }
 
     private function canShowProgressBar(InputInterface $input): bool

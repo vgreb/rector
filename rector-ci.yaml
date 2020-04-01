@@ -17,6 +17,7 @@ parameters:
     exclude_paths:
         - '/Fixture/'
         - '/Source/'
+        - '/*Source/'
         - '/Expected/'
 
     exclude_rectors:

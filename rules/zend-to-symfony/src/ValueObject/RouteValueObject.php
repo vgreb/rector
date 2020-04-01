@@ -53,6 +53,15 @@ final class RouteValueObject
         return $this->params;
     }
 
+    public function getParamsAsString(): string
+    {
+        if ($this->params === []) {
+            return '';
+        }
+
+        return '$' . implode(', $', $this->params);
+    }
+
     public function getSymfonyRoutePhpDocTagNode(): SymfonyRouteTagValueNode
     {
         return new SymfonyRouteTagValueNode($this->getPath());

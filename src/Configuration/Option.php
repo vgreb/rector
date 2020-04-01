@@ -79,6 +79,11 @@ final class Option
     /**
      * @var string
      */
+    public const OPTION_CLEAR_CACHE = 'clear-cache';
+
+    /**
+     * @var string
+     */
     public const PROJECT_TYPE = 'project_type';
 
     /**

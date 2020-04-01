@@ -12,8 +12,6 @@ require __DIR__ . '/../vendor/autoload.php';
 $diffPath = 'https://github.com/symfony/symfony/commit/53a4711520d52bccd20fa6e616731114fa6eb61f.diff';
 $classNamePrefix = 'Doctrine';
 
-
-
 // @see https://regex101.com/r/tyABnc/1/
 $beforeAfterPattern = '#^\-(?<before>[^-].*?)$\n\+(?<after>.*?)$#ms';
 

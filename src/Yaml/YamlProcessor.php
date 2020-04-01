@@ -51,7 +51,6 @@ final class YamlProcessor
         $yamlFileInfos = $this->filesFinder->findInDirectoriesAndFiles($source, ['yaml']);
 
         // 1. raw class rename
-
         $oldToNewClasses = $this->changeConfiguration->getOldToNewClasses();
         if ($oldToNewClasses === []) {
             return;

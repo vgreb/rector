@@ -10,15 +10,18 @@ use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\Interface_;
 use PhpParser\Node\Stmt\Trait_;
 use PhpParser\NodeTraverser;
+use PHPStan\AnalysedCodeException;
 use PHPStan\Analyser\MutatingScope;
 use PHPStan\Analyser\NodeScopeResolver as PHPStanNodeScopeResolver;
-use PHPStan\Analyser\Scope;
 use PHPStan\Node\UnreachableStatementNode;
 use PHPStan\Reflection\ReflectionProvider;
+use Rector\Caching\ChangedFilesDetector;
+use Rector\Caching\FileSystem\DependencyResolver;
 use Rector\Core\Exception\ShouldNotHappenException;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\NodeTypeResolver\PHPStan\Collector\TraitNodeScopeCollector;
 use Rector\NodeTypeResolver\PHPStan\Scope\NodeVisitor\RemoveDeepChainMethodCallNodeVisitor;
+use Symplify\SmartFileSystem\SmartFileInfo;
 
 /**
  * @inspired by https://github.com/silverstripe/silverstripe-upgrader/blob/532182b23e854d02e0b27e68ebc394f436de0682/src/UpgradeRule/PHP/Visitor/PHPStanScopeVisitor.php
@@ -51,32 +54,48 @@ final class NodeScopeResolver
      */
     private $traitNodeScopeCollector;
 
+    /**
+     * @var DependencyResolver
+     */
+    private $dependencyResolver;
+
+    /**
+     * @var ChangedFilesDetector
+     */
+    private $changedFilesDetector;
+
     public function __construct(
+        ChangedFilesDetector $changedFilesDetector,
         ScopeFactory $scopeFactory,
         PHPStanNodeScopeResolver $phpStanNodeScopeResolver,
         ReflectionProvider $reflectionProvider,
         RemoveDeepChainMethodCallNodeVisitor $removeDeepChainMethodCallNodeVisitor,
-        TraitNodeScopeCollector $traitNodeScopeCollector
+        TraitNodeScopeCollector $traitNodeScopeCollector,
+        DependencyResolver $dependencyResolver
     ) {
         $this->scopeFactory = $scopeFactory;
         $this->phpStanNodeScopeResolver = $phpStanNodeScopeResolver;
         $this->reflectionProvider = $reflectionProvider;
         $this->removeDeepChainMethodCallNodeVisitor = $removeDeepChainMethodCallNodeVisitor;
         $this->traitNodeScopeCollector = $traitNodeScopeCollector;
+        $this->dependencyResolver = $dependencyResolver;
+        $this->changedFilesDetector = $changedFilesDetector;
     }
 
     /**
      * @param Node[] $nodes
      * @return Node[]
      */
-    public function processNodes(array $nodes, string $filePath): array
+    public function processNodes(array $nodes, SmartFileInfo $smartFileInfo): array
     {
         $this->removeDeepChainMethodCallNodes($nodes);
 
-        $scope = $this->scopeFactory->createFromFile($filePath);
+        $scope = $this->scopeFactory->createFromFile($smartFileInfo->getRealPath());
+
+        $dependentFiles = [];
 
         // skip chain method calls, performance issue: https://github.com/phpstan/phpstan/issues/254
-        $nodeCallback = function (Node $node, MutatingScope $scope): void {
+        $nodeCallback = function (Node $node, MutatingScope $scope) use (&$dependentFiles): void {
             // the class reflection is resolved AFTER entering to class node
             // so we need to get it from the first after this one
             if ($node instanceof Class_ || $node instanceof Interface_) {
@@ -99,10 +118,21 @@ final class NodeScopeResolver
             } else {
                 $node->setAttribute(AttributeKey::SCOPE, $scope);
             }
+
+            try {
+                foreach ($this->dependencyResolver->resolveDependencies($node, $scope) as $dependentFile) {
+                    $dependentFiles[] = $dependentFile;
+                }
+            } catch (AnalysedCodeException $analysedCodeException) {
+                // @ignoreException
+            }
         };
 
         /** @var MutatingScope $scope */
         $this->phpStanNodeScopeResolver->processNodes($nodes, $scope, $nodeCallback);
+
+        // save for cache
+        $this->changedFilesDetector->addFileWithDependencies($smartFileInfo, $dependentFiles);
 
         return $nodes;
     }
